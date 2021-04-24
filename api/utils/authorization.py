@@ -1,12 +1,14 @@
 from typing import Optional
 
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes
 from passlib.context import CryptContext
+from sqlalchemy import select
 from starlette.requests import Request
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN
 
 from api import models
+from api.db import database_dep
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -57,7 +59,7 @@ class AuthDependency:
         self.enabled = enabled
         self.token = token
 
-    async def __call__(self, request: Request, security_scopes: SecurityScopes, return_token=False):
+    async def __call__(self, request: Request, security_scopes: SecurityScopes, return_token=False, db=database_dep):
         if not self.enabled:
             return None
         if security_scopes.scopes:
@@ -65,12 +67,7 @@ class AuthDependency:
         else:
             authenticate_value = "Bearer"
         token: str = await oauth2_scheme(request) if not self.token else self.token
-        data = (
-            await models.User.join(models.Token)
-            .select(models.Token.id == token)
-            .gino.load((models.User, models.Token))
-            .first()
-        )
+        data = (await db.execute(select(models.User, models.Token).join(models.Token).where(models.Token.id == token))).first()
         if data is None:
             raise HTTPException(
                 status_code=HTTP_401_UNAUTHORIZED,

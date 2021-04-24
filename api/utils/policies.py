@@ -4,9 +4,9 @@ from api import models
 from api.utils.time import now
 
 
-async def get_setting(scheme):
+async def get_setting(scheme, db):
     name = scheme.__name__.lower()
-    item = await models.Setting.query.where(models.Setting.name == name).gino.first()
+    item = (await db.execute(models.Setting.query.where(models.Setting.name == name))).scalar()
     if not item:
         return scheme()
     return scheme(**json.loads(item.value))

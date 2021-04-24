@@ -9,6 +9,7 @@ from sqlalchemy import distinct, func
 from starlette.requests import Request
 
 from api import crud, db, models, pagination, schemes, utils
+from api.db import get_db
 
 router = APIRouter()
 
@@ -106,9 +107,10 @@ async def get_products(
     min_price: Optional[Decimal] = None,
     max_price: Optional[Decimal] = None,
     sale: Optional[bool] = False,
+    db=Depends(get_db),
 ):
     try:
-        user = await utils.authorization.AuthDependency()(request, SecurityScopes(["product_management"]))
+        user = await utils.authorization.AuthDependency()(request, SecurityScopes(["product_management"]), db=db)
     except HTTPException:
         if store is None:
             raise

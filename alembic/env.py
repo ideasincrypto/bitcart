@@ -1,7 +1,9 @@
+import asyncio
 import sys
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from alembic import context
 
@@ -21,9 +23,9 @@ fileConfig(config.config_file_name)
 
 sys.path.insert(0, ".")
 from api.db import CONNECTION_STR  # noqa: E402: sys.path imports
-from api.models import db  # noqa: E402: sys.path imports
+from api.models import Base  # noqa: E402: sys.path imports
 
-target_metadata = db
+target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -59,7 +61,14 @@ def run_migrations_offline():
         context.run_migrations()
 
 
-def run_migrations_online():
+def do_run_migrations(connection):
+    context.configure(compare_type=True, connection=connection, target_metadata=target_metadata)
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_migrations_online():
     """Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine
@@ -69,16 +78,20 @@ def run_migrations_online():
     alembic_config = config.get_section(config.config_ini_section)
     alembic_config["sqlalchemy.url"] = CONNECTION_STR
 
-    connectable = engine_from_config(alembic_config, prefix="sqlalchemy.", poolclass=pool.NullPool)
+    connectable = AsyncEngine(
+        engine_from_config(
+            alembic_config,
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
+            future=True,
+        )
+    )
 
-    with connectable.connect() as connection:
-        context.configure(compare_type=True, connection=connection, target_metadata=target_metadata)
-
-        with context.begin_transaction():
-            context.run_migrations()
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
 
 
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    run_migrations_online()
+    asyncio.run(run_migrations_online())

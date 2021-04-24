@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Security
 from fastapi.security import SecurityScopes
 from pydantic import BaseModel
 from pydantic import create_model as create_pydantic_model
-from sqlalchemy import distinct
+from sqlalchemy import distinct, func
 from starlette.requests import Request
 
 from api import db, events, models, pagination
@@ -27,7 +27,7 @@ class ModelView:
 
     router: APIRouter
     path: str
-    orm_model: db.db.Model
+    orm_model: db.Base
     create_model: Any
     pydantic_model: Any
     display_model: Any
@@ -145,7 +145,8 @@ class ModelView:
         query = self.orm_model.query
         if self.orm_model != models.User and user:
             query = query.where(self.orm_model.user_id == user.id)
-        item = await query.where(self.orm_model.id == model_id).gino.first()
+        with db.db():
+            item = (await db.db.session.execute(query.where(self.orm_model.id == model_id))).scalar()
         if self.custom_methods.get("get_one"):
             item = await self.custom_methods["get_one"](model_id, user, item, internal)
         if not item:
@@ -175,7 +176,7 @@ class ModelView:
                         if self.orm_model != models.User
                         else self.orm_model.query
                     )
-                    .with_only_columns([db.db.func.count(distinct(self.orm_model.id))])
+                    .with_only_columns([func.count(distinct(self.orm_model.id))])
                     .order_by(None)
                     .gino.scalar()
                 )

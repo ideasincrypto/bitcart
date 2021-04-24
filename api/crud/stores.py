@@ -53,14 +53,14 @@ async def store_add_related(item: models.Store):
     if not item:
         return
     item.checkout_settings = item.get_setting(schemes.StoreCheckoutSettings)
-    result = await models.WalletxStore.select("wallet_id").where(models.WalletxStore.store_id == item.id).gino.all()
+    """result = await models.WalletxStore.select("wallet_id").where(models.WalletxStore.store_id == item.id).gino.all()
     result2 = (
         await models.NotificationxStore.select("notification_id")
         .where(models.NotificationxStore.store_id == item.id)
         .gino.all()
     )
     item.wallets = [wallet_id for wallet_id, in result if wallet_id]
-    item.notifications = [notification_id for notification_id, in result2 if notification_id]
+    item.notifications = [notification_id for notification_id, in result2 if notification_id]"""
 
 
 async def stores_add_related(items: Iterable[models.Store]):

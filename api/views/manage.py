@@ -1,8 +1,9 @@
 import os
 
-from fastapi import APIRouter, HTTPException, Security
+from fastapi import APIRouter, Depends, HTTPException, Security
 
 from api import constants, models, schemes, settings, utils
+from api.db import get_db
 
 router = APIRouter()
 
@@ -61,8 +62,8 @@ async def get_daemons(user: models.User = Security(utils.authorization.AuthDepen
 
 
 @router.get("/policies", response_model=schemes.Policy)
-async def get_policies():
-    return await utils.policies.get_setting(schemes.Policy)
+async def get_policies(db=Depends(get_db)):
+    return await utils.policies.get_setting(schemes.Policy, db=db)
 
 
 @router.post("/policies", response_model=schemes.Policy)

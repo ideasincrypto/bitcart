@@ -5,6 +5,7 @@ from api import models
 
 async def product_add_related(item: models.Product):
     # add related discounts
+    return
     if not item:
         return
     result = (
@@ -14,6 +15,6 @@ async def product_add_related(item: models.Product):
 
 
 async def products_add_related(items: Iterable[models.Product]):
-    for item in items:
-        await product_add_related(item)
+    # for item in items:
+    #    await product_add_related(item)
     return items

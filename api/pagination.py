@@ -1,16 +1,14 @@
 import asyncio
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import Callable, Optional, Union
 
 import asyncpg
-from fastapi import Query
-from sqlalchemy import Text, distinct, func, or_, text
+from fastapi import Depends, Query
+from sqlalchemy import Text, distinct, func, or_, select, text
+from sqlalchemy.orm import selectinload, subqueryload
 from starlette.requests import Request
 
 from api import models, utils
-from api.db import db
-
-if TYPE_CHECKING:
-    from gino.declarative import ModelType  # pragma: no cover
+from api.db import database_dep
 
 
 class Pagination:
@@ -28,6 +26,7 @@ class Pagination:
         multiple: bool = Query(default=False),
         sort: str = Query(default=""),
         desc: bool = Query(default=True),
+        db=database_dep,
     ):
         self.request = request
         self.offset = offset
@@ -40,10 +39,14 @@ class Pagination:
         self.desc = desc
         self.desc_s = "desc" if desc else ""
         self.model: Optional["ModelType"] = None
+        self.db = db
 
     async def get_count(self, query) -> int:
-        query = query.with_only_columns([db.func.count(distinct(self.model.id))]).order_by(None)  # type: ignore
-        return await query.gino.scalar() or 0
+        # query =
+        # query = query.statement.with_only_columns([func.count(distinct(self.model.id))]).order_by(None)  # type: ignore
+        return (
+            await self.db.execute(select(func.count(distinct(self.model.id))).select_from(query).order_by(None))
+        ).scalar() or 0
 
     def get_next_url(self, count) -> Union[None, str]:
         if self.offset + self.limit >= count or self.limit == -1:
@@ -61,11 +64,12 @@ class Pagination:
         if not self.sort:
             self.sort = "created"
             self.desc_s = "desc"
+        query = query.order_by(text(f"{self.sort} {self.desc_s}"))
         if self.limit != -1:
             query = query.limit(self.limit)
-        query = query.order_by(text(f"{self.sort} {self.desc_s}"))
+        query = query.offset(self.offset)
         try:
-            return await query.offset(self.offset).gino.all()
+            return (await self.db.execute(query)).scalars().all()
         except asyncpg.exceptions.UndefinedColumnError:
             return []
 
@@ -101,7 +105,9 @@ class Pagination:
         )
         if count_only:
             return await self.get_count(query)
-        count, data = await asyncio.gather(self.get_count(query), self.get_list(query.group_by(model.id)))
+        count = await self.get_count(query)
+        data = await self.get_list(query.group_by(model.id))
+        # count, data = await asyncio.gather(self.get_count(query), self.get_list(query.group_by(model.id)))
         if postprocess:
             data = await postprocess(data)
         return {
@@ -115,13 +121,15 @@ class Pagination:
         self.model = model
         query = (
             (
-                model.query.select_from(model.join(models.DiscountxProduct).join(models.Discount))
+                model.query.options(selectinload(models.Store.wallets))
+                .select_from(model.join(models.DiscountxProduct).join(models.Discount))
                 .having(func.count(models.DiscountxProduct.product_id) > 0)
                 .where(models.Discount.end_date > utils.time.now())
             )
             if model == models.Product and sale
             else model.query
         )
+        # query = query
         queries = self.search()
         query = query.where(queries) if queries != [] else query  # sqlalchemy core requires explicit checks
         return query

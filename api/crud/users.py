@@ -1,11 +1,11 @@
 from fastapi import HTTPException
+from sqlalchemy import func
 
 from api import models, schemes, utils
-from api.db import db
 
 
 async def user_count():
-    return await db.func.count(models.User.id).gino.scalar()
+    return await func.count(models.User.id).gino.scalar()
 
 
 async def create_user(user: schemes.CreateUser, auth_user: schemes.User):

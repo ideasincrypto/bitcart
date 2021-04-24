@@ -12,14 +12,15 @@ async def create_wallet(wallet: schemes.CreateWallet, user: schemes.User):
 
 
 async def wallet_add_related(item: models.Wallet):
+    return
     if not item:
         return
     item.balance = await utils.wallets.get_wallet_balance(settings.get_coin(item.currency, item.xpub))
 
 
 async def wallets_add_related(items: Iterable[models.Wallet]):
-    for item in items:
-        await wallet_add_related(item)
+    # for item in items:
+    #    await wallet_add_related(item)
     return items
 
 

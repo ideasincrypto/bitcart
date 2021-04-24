@@ -2,57 +2,67 @@ import secrets
 
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
-from gino.crud import UpdateRequest
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+    select,
+)
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.orm import relationship
+from sqlalchemy.ext.hybrid import hybrid_method
+from sqlalchemy.orm import Query, load_only
+from sqlalchemy.orm import relationship as sqa_relationship
 
 from api import settings
-from api.db import db
+from api.db import Base
 from api.ext.moneyformat import currency_table
 
-# shortcuts
-Column = db.Column
-Integer = db.Integer
-String = db.String
-Text = db.Text
-Boolean = db.Boolean
-Numeric = db.Numeric
-DateTime = db.DateTime
-Text = db.Text
-ForeignKey = db.ForeignKey
-JSON = db.JSON
-UniqueConstraint = db.UniqueConstraint
+
+class OnlyIdQuery(Query):
+    def all(self):
+        return self.all(self.options(load_only("id")))
 
 
-class User(db.Model):
-    __tablename__ = "users"
+def relationship(*args, **kwargs):
+    return sqa_relationship(lazy="selectin", *args, **kwargs)
 
-    id = Column(Integer, primary_key=True, index=True)
+
+class User(Base):
+    # __tablename__ = "users"
+
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     is_superuser = Column(Boolean(), default=False)
     created = Column(DateTime(True), nullable=False)
 
 
-class WalletUpdateRequest(UpdateRequest):
+# TODO
+"""class WalletUpdateRequest(UpdateRequest):
     async def apply(self):
         coin = settings.get_coin(self._instance.currency)
         if await coin.validate_key(self._instance.xpub):
             return await super().apply()
         else:
-            raise HTTPException(422, "Wallet key invalid")
+            raise HTTPException(422, "Wallet key invalid")"""
 
 
-class Wallet(db.Model):
-    __tablename__ = "wallets"
-    _update_request_cls = WalletUpdateRequest
+class Wallet(Base):
+    # __tablename__ = "wallets"
+    # _update_request_cls = WalletUpdateRequest
 
-    id = Column(Integer, primary_key=True, index=True)
     name = Column(String(length=1000), index=True)
     xpub = Column(String(length=1000), index=True)
     currency = Column(String(length=1000), index=True)
     user_id = Column(Integer, ForeignKey(User.id, ondelete="SET NULL"))
-    user = relationship(User, backref="wallets")
+    user = relationship(User)
     created = Column(DateTime(True), nullable=False)
     lightning_enabled = Column(Boolean(), default=False)
 
@@ -66,73 +76,61 @@ class Wallet(db.Model):
             raise HTTPException(422, "Wallet key invalid")
 
 
-class Notification(db.Model):
-    __tablename__ = "notifications"
+class Notification(Base):
+    # __tablename__ = "notifications"
 
-    id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey(User.id, ondelete="SET NULL"))
-    user = relationship(User, backref="notifications")
+    user = relationship(User)
     name = Column(String(length=1000), index=True)
     provider = Column(String(length=10000))
     data = Column(JSON)
     created = Column(DateTime(True), nullable=False)
 
 
-class Template(db.Model):
-    __tablename__ = "templates"
+class Template(Base):
+    # __tablename__ = "templates"
 
-    id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey(User.id, ondelete="SET NULL"))
-    user = relationship(User, backref="templates")
+    user = relationship(User)
     name = Column(String(length=100000), index=True)
     text = Column(Text())
     created = Column(DateTime(True), nullable=False)
     _unique_constaint = UniqueConstraint("user_id", "name")
 
 
-class WalletxStore(db.Model):
-    __tablename__ = "walletsxstores"
+WalletxStore = Table(
+    "walletsxstores",
+    Base.metadata,
+    Column("wallet_id", Integer, ForeignKey("wallets.id", ondelete="SET NULL")),
+    Column("store_id", Integer, ForeignKey("stores.id", ondelete="SET NULL")),
+)
+
+
+"""class WalletxStore(Base):
+    # __tablename__ = "walletsxstores"
 
     wallet_id = Column(Integer, ForeignKey("wallets.id", ondelete="SET NULL"))
     store_id = Column(Integer, ForeignKey("stores.id", ondelete="SET NULL"))
+"""
 
+NotificationxStore = Table(
+    "notificationsxstores",
+    Base.metadata,
+    Column("notification_id", Integer, ForeignKey("notifications.id", ondelete="SET NULL")),
+    Column("store_id", Integer, ForeignKey("stores.id", ondelete="SET NULL")),
+)
 
-class NotificationxStore(db.Model):
-    __tablename__ = "notificationsxstores"
+"""class NotificationxStore(Base):
+    # __tablename__ = "notificationsxstores"
 
     notification_id = Column(Integer, ForeignKey("notifications.id", ondelete="SET NULL"))
-    store_id = Column(Integer, ForeignKey("stores.id", ondelete="SET NULL"))
+    store_id = Column(Integer, ForeignKey("stores.id", ondelete="SET NULL"))"""
 
 
-class StoreUpdateRequest(UpdateRequest):
-    def update(self, **kwargs):
-        self.wallets = kwargs.pop("wallets", None)
-        self.notifications = kwargs.pop("notifications", None)
-        return super().update(**kwargs)
+class Store(Base):
+    # __tablename__ = "stores"
+    # _update_request_cls = StoreUpdateRequest TODO
 
-    async def apply(self):
-        if self.wallets is not None:
-            await WalletxStore.delete.where(WalletxStore.store_id == self._instance.id).gino.status()
-        if self.wallets is None:
-            self.wallets = []
-        for i in self.wallets:
-            await WalletxStore.create(store_id=self._instance.id, wallet_id=i)
-        self._instance.wallets = self.wallets
-        if self.notifications is not None:
-            await NotificationxStore.delete.where(NotificationxStore.store_id == self._instance.id).gino.status()
-        if self.notifications is None:
-            self.notifications = []
-        for i in self.notifications:
-            await NotificationxStore.create(store_id=self._instance.id, notification_id=i)
-        self._instance.notifications = self.notifications
-        return await super().apply()
-
-
-class Store(db.Model):
-    __tablename__ = "stores"
-    _update_request_cls = StoreUpdateRequest
-
-    id = Column(Integer, primary_key=True, index=True)
     name = Column(String(1000), index=True)
     default_currency = Column(Text)
     email = Column(String(1000), index=True)
@@ -146,9 +144,10 @@ class Store(db.Model):
     wallets = relationship("Wallet", secondary=WalletxStore)
     notifications = relationship("Notification", secondary=NotificationxStore)
     user_id = Column(Integer, ForeignKey(User.id, ondelete="SET NULL"))
-    user = relationship(User, backref="stores")
+    user = relationship(User)
     created = Column(DateTime(True), nullable=False)
 
+    @hybrid_method
     def get_setting(self, scheme):
         data = self.checkout_settings or {}
         return scheme(**data)
@@ -158,12 +157,11 @@ class Store(db.Model):
         await self.update(checkout_settings=json_data).apply()
 
 
-class Discount(db.Model):
-    __tablename__ = "discounts"
+class Discount(Base):
+    # __tablename__ = "discounts"
 
-    id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey(User.id, ondelete="SET NULL"))
-    user = relationship(User, backref="discounts")
+    user = relationship(User)
     name = Column(String(length=1000), index=True)
     percent = Column(Integer)
     description = Column(Text, index=True)
@@ -173,34 +171,23 @@ class Discount(db.Model):
     created = Column(DateTime(True), nullable=False)
 
 
-class DiscountxProduct(db.Model):
-    __tablename__ = "discountsxproducts"
+DiscountxProduct = Table(
+    "discountsxproducts",
+    Base.metadata,
+    Column("discount_id", Integer, ForeignKey("discounts.id", ondelete="SET NULL")),
+    Column("product_id", Integer, ForeignKey("products.id", ondelete="SET NULL")),
+)
+"""class DiscountxProduct(Base):
+    # __tablename__ = "discountsxproducts"
 
     discount_id = Column(Integer, ForeignKey("discounts.id", ondelete="SET NULL"))
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"))
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"))"""
 
 
-class DiscountXProductUpdateRequest(UpdateRequest):
-    def update(self, **kwargs):
-        self.discounts = kwargs.pop("discounts", None)
-        return super().update(**kwargs)
+class Product(Base):
+    # __tablename__ = "products"
+    # _update_request_cls = DiscountXProductUpdateRequest TODO
 
-    async def apply(self):
-        if self.discounts is not None:
-            await DiscountxProduct.delete.where(DiscountxProduct.product_id == self._instance.id).gino.status()
-        if self.discounts is None:
-            self.discounts = []
-        for i in self.discounts:
-            await DiscountxProduct.create(product_id=self._instance.id, discount_id=i)
-        self._instance.discounts = self.discounts
-        return await super().apply()
-
-
-class Product(db.Model):
-    __tablename__ = "products"
-    _update_request_cls = DiscountXProductUpdateRequest
-
-    id = Column(Integer, primary_key=True, index=True)
     name = Column(String(length=1000), index=True)
     price = Column(Numeric(16, 8), nullable=False)
     quantity = Column(Numeric(16, 8), nullable=False)
@@ -215,41 +202,27 @@ class Product(db.Model):
     )
     status = Column(String(1000), nullable=False)
     templates = Column(JSON)
-    store = relationship("Store", back_populates="products")
+    store = relationship("Store")
     discounts = relationship("Discount", secondary=DiscountxProduct)
     user_id = Column(Integer, ForeignKey(User.id, ondelete="SET NULL"))
-    user = relationship(User, backref="products")
+    invoices = relationship("ProductxInvoice", back_populates="product")
+    user = relationship(User)
     created = Column(DateTime(True), nullable=False)
 
 
-class ProductxInvoice(db.Model):
-    __tablename__ = "productsxinvoices"
+class ProductxInvoice(Base):
+    # __tablename__ = "productsxinvoices"
 
     product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"))
     invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="SET NULL"))
     count = Column(Integer)
+    product = relationship("Product", back_populates="invoices")
+    invoice = relationship("Invoice", back_populates="products")
 
 
-class InvoiceUpdateRequest(UpdateRequest):
-    def update(self, **kwargs):
-        self.products = kwargs.pop("products", None)
-        return super().update(**kwargs)
+class PaymentMethod(Base):
+    # __tablename__ = "paymentmethods"
 
-    async def apply(self):
-        if self.products is not None:
-            await ProductxInvoice.delete.where(ProductxInvoice.invoice_id == self._instance.id).gino.status()
-        if self.products is None:
-            self.products = []
-        for i in self.products:
-            await ProductxInvoice.create(invoice_id=self._instance.id, product_id=i)
-        self._instance.products = self.products
-        return await super().apply()
-
-
-class PaymentMethod(db.Model):
-    __tablename__ = "paymentmethods"
-
-    id = Column(Integer, primary_key=True, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="SET NULL"))
     amount = Column(Numeric(16, 8), nullable=False)
     rate = Column(Numeric(16, 8))
@@ -280,11 +253,10 @@ class PaymentMethod(db.Model):
         return name.upper()
 
 
-class Invoice(db.Model):
-    __tablename__ = "invoices"
-    _update_request_cls = InvoiceUpdateRequest
+class Invoice(Base):
+    # __tablename__ = "invoices"
+    # _update_request_cls = InvoiceUpdateRequest TODO
 
-    id = Column(Integer, primary_key=True, index=True)
     price = Column(Numeric(16, 8), nullable=False)
     currency = Column(Text)
     paid_currency = Column(String(length=1000))
@@ -295,14 +267,14 @@ class Invoice(db.Model):
     promocode = Column(Text)
     notification_url = Column(Text)
     redirect_url = Column(Text)
-    products = relationship("Product", secondary=ProductxInvoice)
+    products = relationship("ProductxInvoice", back_populates="invoice")
     store_id = Column(
         Integer,
         ForeignKey("stores.id", deferrable=True, initially="DEFERRED", ondelete="SET NULL"),
         index=True,
     )
     order_id = Column(Text)
-    store = relationship("Store", back_populates="invoices")
+    store = relationship("Store")
     user_id = Column(Integer, ForeignKey(User.id, ondelete="SET NULL"))
     user = relationship(User, backref="invoices")
     created = Column(DateTime(True), nullable=False)
@@ -324,17 +296,16 @@ class Invoice(db.Model):
         return await super().create(**kwargs), store.wallets
 
 
-class Setting(db.Model):
-    __tablename__ = "settings"
+class Setting(Base):
+    # __tablename__ = "settings"
 
-    id = Column(Integer, primary_key=True, index=True)
     name = Column(Text)
     value = Column(Text)
     created = Column(DateTime(True), nullable=False)
 
 
-class Token(db.Model):
-    __tablename__ = "tokens"
+class Token(Base):
+    # __tablename__ = "tokens"
 
     id = Column(String, primary_key=True)
     user_id = Column(Integer, ForeignKey(User.id, ondelete="SET NULL"), index=True)

@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Security
+from fastapi import APIRouter, Depends, Security
 from sqlalchemy import distinct, func, select
 
-from api import crud, db, models, schemes, utils
+from api import crud, models, schemes, utils
+from api.db import get_db
 
 router = APIRouter()
 
 
 @router.get("/stats")
-async def get_stats(user: models.User = Security(utils.authorization.AuthDependency(), scopes=["full_control"])):
+async def get_stats(
+    user: models.User = Security(utils.authorization.AuthDependency(), scopes=["full_control"]), db=Depends(get_db)
+):
     queries = []
     output_formats = []
     for index, orm_model in enumerate(utils.routing.ModelView.crud_models):
@@ -17,10 +20,10 @@ async def get_stats(user: models.User = Security(utils.authorization.AuthDepende
             query = query.where(orm_model.user_id == user.id)
         queries.append(query.label(label))
         output_formats.append((label, index))
-    result = await db.db.first(select(queries))
+    result = (await db.execute(select(queries))).first()
     response = {key: result[ind] for key, ind in output_formats}
     response.pop("users", None)
-    response["balance"] = await utils.wallets.get_wallet_balances(user)
+    response["balance"] = await utils.wallets.get_wallet_balances(user, db=db)
     return response
 
 

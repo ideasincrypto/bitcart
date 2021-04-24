@@ -161,11 +161,15 @@ class CreateStore(BaseStore):
 class PublicStore(BaseStore):
     id: Optional[int]
     user_id: int
+    # wallets: List[Wallet]
+    notifications: List["Notification"]
 
 
 class Store(CreateStore):
     id: Optional[int]
     user_id: int
+    # wallets: List[Wallet]
+    notifications: List["Notification"]
 
 
 class CreateDiscount(CreatedMixin):
@@ -399,3 +403,7 @@ class SSHSettings(BaseModel):
             kwargs.update(password=self.password)
         client.connect(**kwargs)
         return client
+
+
+PublicStore.update_forward_refs()
+Store.update_forward_refs()
