@@ -1,3 +1,4 @@
 aiohttp<4.0
+ddtrace
 monero
 universalasync
