@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 import httpx
 import trontxsize
 from aiohttp import ClientError as AsyncClientError
-from aiohttp import ClientSession
+from aiohttp import ClientSession, TCPConnector
 from async_lru import alru_cache
 from eth import ETHDaemon
 from eth import KeyStore as ETHKeyStore
@@ -44,7 +44,7 @@ class AsyncHTTPProvider:
 
     async def make_request(self, method, params=None):
         if self.client is None:
-            self.client = ClientSession(headers=self.headers)
+            self.client = ClientSession(headers=self.headers, connector=TCPConnector(ssl=False))
         if params is None:
             params = {}
         url = urljoin(self.endpoint_uri, method)
