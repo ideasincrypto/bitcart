@@ -656,7 +656,7 @@ class BlockProcessorDaemon(BaseDaemon, metaclass=ABCMeta):
                 block = await self.coin.get_block_txes(block_number)
                 transactions = []
                 tasks = []
-                semaphore = asyncio.Semaphore(20)
+                semaphore = asyncio.BoundedSemaphore(20)
                 for tx_data in block:
                     tasks.append(self.process_tx_task(tx_data, semaphore))
                 results = await asyncio.gather(*tasks)
