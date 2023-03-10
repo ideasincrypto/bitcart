@@ -1,5 +1,4 @@
 import asyncio
-import json
 import weakref
 from decimal import Decimal
 from urllib.parse import urljoin
@@ -15,6 +14,7 @@ from eth import Transaction, daemon_ctx, from_wei, load_json_dict, str_to_bool, 
 from eth_account import Account
 from genericprocessor import BlockchainFeatures
 from mnemonic import Mnemonic
+from orjson import loads as json_loads
 from tronpy import AsyncTron, async_tron, keys
 from tronpy.abi import trx_abi
 from tronpy.async_tron import AsyncContract, AsyncTransaction
@@ -22,7 +22,7 @@ from tronpy.exceptions import AddressNotFound
 from utils import exception_retry_middleware, rpc
 
 with open("daemons/tokens/trc20.json") as f:
-    TRC20_TOKENS = json.loads(f.read())
+    TRC20_TOKENS = json_loads(f.read())
 
 mnemonic = Mnemonic("english")
 
@@ -50,7 +50,7 @@ class AsyncHTTPProvider:
         url = urljoin(self.endpoint_uri, method)
         async with self.client.post(url, json=params) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(loads=json_loads)
 
 
 async_tron.AsyncHTTPProvider = AsyncHTTPProvider  # monkey patch
