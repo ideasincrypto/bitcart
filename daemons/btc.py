@@ -48,6 +48,8 @@ class BTCDaemon(BaseDaemon):
     # override if your daemon has different networks than default electrum provides
     NETWORK_MAPPING: dict = {}
 
+    SKIP_NETWORK = ["getinfo", "is_synchronized", "help"]
+
     def register_aliases(self):
         for alias, func in self.ALIASES.items():
             if func in self.supported_methods:
@@ -252,8 +254,9 @@ class BTCDaemon(BaseDaemon):
     async def _get_wallet(self, id, req_method, xpub, diskless=False):
         wallet = cmd = error = None
         try:
+            should_skip = req_method in self.SKIP_NETWORK
             wallet, cmd = await self.load_wallet(xpub, config=self.electrum_config, diskless=diskless)
-            while self.is_still_syncing(wallet):
+            while not should_skip and self.is_still_syncing(wallet):
                 await asyncio.sleep(0.1)
         except Exception as e:
             if self.VERBOSE:
@@ -673,6 +676,29 @@ class BTCDaemon(BaseDaemon):
             return False
         await self.daemon.network.switch_to_interface(server)
         return True
+
+    @rpc
+    async def is_synchronized(self, key=None, wallet=None):
+        key = key or wallet
+        wallet = self.wallets[key]["wallet"]
+        synchr = wallet.adb.synchronizer
+        verif = wallet.adb.verifier
+        print("SYNCHRONIZER")
+        print(
+            synchr._init_done,
+            synchr._adding_addrs,
+            synchr.requested_addrs,
+            synchr._handling_addr_statuses,
+            synchr.requested_histories,
+            synchr.requested_tx,
+            synchr._stale_histories,
+            synchr.status_queue,
+            synchr.status_queue.empty(),
+        )
+        print("VERIFIER")
+        print(verif.requested_merkle, verif.wallet.unverified_tx)
+        print("END OUTPUT")
+        return wallet.is_up_to_date()
 
 
 if __name__ == "__main__":

@@ -524,7 +524,6 @@ class BlockProcessorDaemon(BaseDaemon, metaclass=ABCMeta):
         "getunusedaddress": "getaddress",
         "list_invoices": "list_requests",
     }
-    SKIP_NETWORK = ["getinfo"]
 
     DIVISIBILITY: int
     BLOCK_TIME: int
