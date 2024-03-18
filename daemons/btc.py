@@ -161,6 +161,7 @@ class BTCDaemon(BaseDaemon):
         self.loop = asyncio.get_running_loop()
         self.daemon = self.create_daemon()
         self.network = self.daemon.network
+        self.network.debug = True
         callback_function = self._process_events if self.ASYNC_CLIENT else self._process_events_sync
         self.register_callbacks(callback_function)
 

@@ -1,3 +1,4 @@
 electrum-ltc[crypto] @ https://github.com/bitcart/electrum-ltc/archive/b0c8bf8dd6c829ec5e93ff85627083f43b3db857.zip
+https://github.com/kyuupichan/aiorpcX/archive/17616f37cf12773d0e35468feadd3a2080b78b7c.zip
 protobuf<4
 scrypt>=0.6.0
