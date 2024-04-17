@@ -224,7 +224,15 @@ async def create_payment_method(invoice, wallet, product, store, discounts, prom
 
 async def create_method_for_wallet(invoice, wallet, discounts, store, product, promocode):
     try:
-        return await create_payment_method(invoice, wallet, product, store, discounts, promocode)
+        start_time = time.monotonic()
+        result = await create_payment_method(invoice, wallet, product, store, discounts, promocode)
+        creation_time = time.monotonic() - start_time
+        suffix = f"/{wallet.contract}" if wallet.contract else ""
+        logger.info(
+            f"Successfully created payment method {wallet.id} ({wallet.currency}{suffix}) "
+            f"for invoice {invoice.id} in {creation_time:.2f}s"
+        )
+        return result
     except Exception as e:
         logger.error(
             f"Invoice {invoice.id}: failed creating payment method {wallet.currency.upper()}:\n{get_exception_message(e)}"
